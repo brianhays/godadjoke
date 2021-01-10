@@ -1,50 +1,72 @@
-/*
-Copyright © 2021 Brian Hays <github.com/brianhays>
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
-*/
+// Package cmd is where the dadjoke magic happens
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
-	"github.com/spf13/cobra"
+	"io/ioutil"
+	"log"
+	"net/http"
 	"os"
 
-	homedir "github.com/mitchellh/go-homedir"
-	"github.com/spf13/viper"
+	"github.com/spf13/cobra"
 )
-
-var cfgFile string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "godadjoke",
-	Short: "A brief description of your application",
-	Long: `A longer description that spans multiple lines and likely contains
-examples and usage of using your application. For example:
+	Use:     "godadjoke",
+	Version: "0.0.1",
+	Short:   "A random dadjoke in your terminal",
+	Long:    `A simple go based CLI to grab a random dad joke from the icanhazdadjoke api`,
+	Run: func(cmd *cobra.Command, args []string) {
+		getRandomJoke()
+	},
+}
 
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
-	// Uncomment the following line if your bare application
-	// has an action associated with it:
-	//	Run: func(cmd *cobra.Command, args []string) { },
+// JokeData struct for json data returned from the API
+type JokeData struct {
+	ID      string `json:"id"`
+	DadJoke string `json:"joke"`
+	Status  int    `json:"status"`
+}
+
+func getRandomJoke() {
+	url := "https://icanhazdadjoke.com/"
+	responseBytes := getJokeData(url)
+	joke := JokeData{}
+
+	if err := json.Unmarshal(responseBytes, &joke); err != nil {
+		fmt.Printf("Could not unmarshal reponseBytes. %v", err)
+	}
+
+	fmt.Println(string(joke.DadJoke))
+}
+
+func getJokeData(baseAPI string) []byte {
+	request, err := http.NewRequest(
+		http.MethodGet, //method
+		baseAPI,        //url
+		nil,            //body
+	)
+
+	if err != nil {
+		log.Printf("Could not request a dadjoke. %v", err)
+	}
+
+	request.Header.Add("Accept", "application/json")
+	request.Header.Add("User-Agent", "Dadjoke CLI (https://github.com/brianhays/godadjoke)")
+
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		log.Printf("Could not make a request. %v", err)
+	}
+
+	responseBytes, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		log.Printf("Could not read response body. %v", err)
+	}
+
+	return responseBytes
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -53,45 +75,5 @@ func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
-	}
-}
-
-func init() {
-	cobra.OnInitialize(initConfig)
-
-	// Here you will define your flags and configuration settings.
-	// Cobra supports persistent flags, which, if defined here,
-	// will be global for your application.
-
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.godadjoke.yaml)")
-
-	// Cobra also supports local flags, which will only run
-	// when this action is called directly.
-	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
-}
-
-// initConfig reads in config file and ENV variables if set.
-func initConfig() {
-	if cfgFile != "" {
-		// Use config file from the flag.
-		viper.SetConfigFile(cfgFile)
-	} else {
-		// Find home directory.
-		home, err := homedir.Dir()
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
-
-		// Search config in home directory with name ".godadjoke" (without extension).
-		viper.AddConfigPath(home)
-		viper.SetConfigName(".godadjoke")
-	}
-
-	viper.AutomaticEnv() // read in environment variables that match
-
-	// If a config file is found, read it in.
-	if err := viper.ReadInConfig(); err == nil {
-		fmt.Println("Using config file:", viper.ConfigFileUsed())
 	}
 }
